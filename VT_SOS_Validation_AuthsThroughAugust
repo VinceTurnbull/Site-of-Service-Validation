@@ -1,0 +1,45 @@
+/**** SoS Validation On August Auths, Claims through July******/
+-- 1376 records
+-- 1341 records after remove blanks
+-- 1340 distinct auth_ids before left join
+-- 1340 distinct auth_ids after left join
+
+
+
+-- fuzzy matches need to have a score of 5 to be considered a match
+with fuzzy_matches as (
+  select *
+  from claimrecon_monthly.claimtoauth_global_python_qc 
+  where fuzzy_match_sum = 5),
+  
+match_auths as(
+  select a.*
+  , b.clm_claim_id
+  from testdb.SOS_Nudges_AuthToClaims_Aug21 a
+  left join fuzzy_matches b
+  on a.auth_number = b.auth_number
+  where a.auth_number != ''),
+  
+
+map_pos as(
+select a.*
+, b.pos
+, b."encounter_id"
+, (case when b.pos in ('13','21', '27', '28', '31', '32', '33', '34', '35', '51', '55', '56', '61') then 'IP' 
+   when b.pos is NULL then 'no match' else 'OP' end ) as IP_FLAG
+from match_auths a 
+left join "analytics_dw"."claims_current" b
+on a.clm_claim_id = b.claim_id
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+)
+
+
+-- Recommend only looking at start dates through April; claims data current through July so need to consider claim lag
+
+select * from (
+select a.*
+, concat( substring(b.start_date, 1, 4), substring(b.start_date, 6, 2)) as StartDate_YYYYMM
+from map_pos a
+inner join "analytics_dw"."service_requests_stg" b 
+on a.cohere_id = b.cohere_id)
+where StartDate_YYYYMM in ('202101' , '202102', '202103', '202104')
